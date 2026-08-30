@@ -20,6 +20,7 @@ import { ToolCallDetailsContent } from "./tool-call-details";
 // ----- Types -----
 
 export interface ToolCallSheetData {
+  toolName: string;
   displayName: string;
   summary?: string;
   detail?: ToolCallDetail;
@@ -140,7 +141,14 @@ interface ToolCallSheetContentProps {
 
 function ToolCallSheetContent({ data, onClose }: ToolCallSheetContentProps) {
   const { theme } = useUnistyles();
-  const { displayName, detail, errorText, icon: IconComponent, showLoadingSkeleton } = data;
+  const {
+    toolName,
+    displayName,
+    detail,
+    errorText,
+    icon: IconComponent,
+    showLoadingSkeleton,
+  } = data;
 
   return (
     <View style={styles.container}>
@@ -160,6 +168,7 @@ function ToolCallSheetContent({ data, onClose }: ToolCallSheetContentProps) {
       {/* Content */}
       <BottomSheetScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <ToolCallDetailsContent
+          toolName={toolName}
           detail={detail}
           errorText={errorText}
           fillAvailableHeight

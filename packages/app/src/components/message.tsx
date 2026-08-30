@@ -3141,6 +3141,7 @@ export const ToolCall = memo(function ToolCall({
   const handleToggle = useCallback(() => {
     if (!shouldRenderInline) {
       openToolCall({
+        toolName,
         displayName: presentation.displayName,
         summary: presentation.summary,
         detail: effectiveDetail,
@@ -3154,6 +3155,7 @@ export const ToolCall = memo(function ToolCall({
   }, [
     shouldRenderInline,
     openToolCall,
+    toolName,
     presentation.displayName,
     presentation.summary,
     presentation.errorText,
@@ -3194,6 +3196,7 @@ export const ToolCall = memo(function ToolCall({
     if (!shouldRenderInline) return null;
     return (
       <ToolCallDetailsContent
+        toolName={toolName}
         detail={effectiveDetail}
         errorText={presentation.errorText}
         maxHeight={maxDetailHeight}
@@ -3202,6 +3205,7 @@ export const ToolCall = memo(function ToolCall({
     );
   }, [
     shouldRenderInline,
+    toolName,
     effectiveDetail,
     presentation.errorText,
     presentation.isLoadingDetails,
