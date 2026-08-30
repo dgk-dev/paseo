@@ -42,7 +42,6 @@ import {
   CircleDot,
   Copy,
   Plus,
-  RotateCcw,
   TriangleAlertIcon,
   Scissors,
   MicVocal,
@@ -2280,8 +2279,6 @@ function taskActivityIcon(activity: TaskActivity) {
       return CircleDot;
     case "completed":
       return Check;
-    case "reopened":
-      return RotateCcw;
     default:
       return CheckSquare;
   }
