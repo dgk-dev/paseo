@@ -290,6 +290,7 @@ export const zhCN: TranslationResources = {
       zoomIn: "放大",
       zoomOut: "缩小",
       resetZoom: "重置视图",
+      fullscreen: "全屏",
       viewSource: "查看源码",
       viewDiagram: "查看图表",
     },
