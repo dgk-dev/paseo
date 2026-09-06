@@ -105,6 +105,9 @@ const PASEO_PI_ENTRY_CAPTURE_MARKER = "PASEO_ENTRY_CAPTURE";
 const PASEO_PI_SUBMITTED_USER_ENTRY_MARKER = "PASEO_SUBMITTED_USER_ENTRY";
 const PASEO_PI_COMMAND_RESULT_MARKER = "PASEO_COMMAND_RESULT";
 const DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS = 30_000;
+// Extension and MCP initialization can keep control-plane RPCs such as
+// get_state pending beyond 30 seconds even though the answer still arrives.
+const DEFAULT_PI_RPC_TIMEOUT_MS = 60_000;
 const QUESTION_RESPONSE_HEADER = "Response";
 const QUESTION_COMMENT_HEADER = "Comment";
 const PI_ASK_USER_FREEFORM_SENTINEL = "✏️ Type custom response...";
@@ -113,6 +116,7 @@ const COMBINED_ASK_USER_METADATA = "ask_user_select_optional_comment";
 export const PiProviderParamsSchema = z
   .object({
     sessionDir: z.string().min(1).optional(),
+    rpcTimeoutMs: z.number().int().positive().default(DEFAULT_PI_RPC_TIMEOUT_MS),
     extensionTimeoutMs: z.number().int().positive().default(DEFAULT_PI_EXTENSION_RESULT_TIMEOUT_MS),
   })
   .strict();
@@ -1524,12 +1528,17 @@ export function projectPiScopedCatalog(input: {
   );
 }
 
-function createRuntime(logger: Logger, runtimeSettings?: ProviderRuntimeSettings): PiRuntime {
+function createRuntime(
+  logger: Logger,
+  runtimeSettings: ProviderRuntimeSettings | undefined,
+  requestTimeoutMs: number,
+): PiRuntime {
   return new PiCliRuntime({
     logger,
     runtimeSettings,
     command: [PI_BINARY_COMMAND],
     commandsRpcName: "get_commands",
+    requestTimeoutMs,
   });
 }
 
@@ -3052,7 +3061,9 @@ export class PiRpcAgentClient implements AgentClient {
     this.runtimeSettings = options.runtimeSettings;
     this.providerParams = PiProviderParamsSchema.parse(options.providerParams ?? {});
     this.selectionPolicy = options.selectionPolicy;
-    this.runtime = options.runtime ?? createRuntime(options.logger, options.runtimeSettings);
+    this.runtime =
+      options.runtime ??
+      createRuntime(options.logger, options.runtimeSettings, this.providerParams.rpcTimeoutMs);
     this.catalogScopeProjectionFactory =
       options.catalogScopeProjectionFactory ?? createPiCatalogScopeProjection;
   }

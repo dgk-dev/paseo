@@ -19,6 +19,7 @@ import { describe, expect, onTestFinished, test, vi } from "vitest";
 import type { AgentProviderSelectionPolicy } from "@getpaseo/protocol/agent-types";
 import type { AgentSession, AgentSessionConfig, AgentStreamEvent } from "../../agent-sdk-types.js";
 import {
+  PiProviderParamsSchema,
   PiRpcAgentClient,
   PiRpcAgentSession,
   projectPiScopedCatalog,
@@ -28,6 +29,11 @@ import { FakePi } from "./test-utils/fake-pi.js";
 
 const ONE_BY_ONE_PNG_BASE64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+test("Pi RPC timeout defaults to 60 seconds and accepts an override", () => {
+  expect(PiProviderParamsSchema.parse({}).rpcTimeoutMs).toBe(60_000);
+  expect(PiProviderParamsSchema.parse({ rpcTimeoutMs: 90_000 }).rpcTimeoutMs).toBe(90_000);
+});
 
 const DASEO_PI_SELECTION_POLICY: AgentProviderSelectionPolicy = {
   preferenceMode: "defaults",
