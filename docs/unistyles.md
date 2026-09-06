@@ -379,6 +379,18 @@ For paint-layer bugs, use high-contrast probes:
 
 The welcome-screen investigation used this approach to prove the white layer was the `ScrollView` content container.
 
+## Patching The Web Runtime
+
+When backporting a Unistyles web fix, patch the TypeScript source and both
+shipped JavaScript builds. Native Metro resolves the package's `react-native`
+export to `src`, but browser and Electron Metro resolve its `browser` export to
+`lib/module`; CommonJS consumers use `lib/commonjs`. A source-only patch leaves
+Electron running the old code.
+
+Register every dependency patch in `scripts/postinstall-patches.mjs`. A file in
+`patches/` is inert unless that script knows which installed package activates
+it.
+
 ## References
 
 - [Unistyles v3 documentation](https://www.unistyl.es/)
