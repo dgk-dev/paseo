@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
@@ -311,6 +311,40 @@ describe("ScheduleService", () => {
     // ENOTEMPTY races when AgentManager flushes a snapshot mid-cleanup.
     await agentStorage.flush();
     await rm(tempDir, { recursive: true, force: true });
+  });
+
+  test("checks daily retry conditions before starting any runner or workspace", async () => {
+    const runner = vi.fn(async () => ({ agentId: null, output: "Main check complete" }));
+    const service = createScheduleService({
+      paseoHome: tempDir,
+      logger: createTestLogger(),
+      agentManager: new AgentManager({ logger: createTestLogger() }),
+      agentStorage,
+      providerSnapshotManager: NO_UNATTENDED_SCHEDULE_POLICY,
+      now: () => now,
+      runner,
+    });
+    const input = {
+      prompt: "Audit",
+      cadence: { type: "cron" as const, expression: "0 5 * * *", timezone: "Asia/Seoul" },
+      target: { type: "new-agent" as const, config: { provider: "pi", cwd: tempDir } },
+    };
+    const main = await service.create(input);
+    const retry = await service.create(input);
+    await writeFile(
+      join(tempDir, "schedule-retry-policies.json"),
+      JSON.stringify({
+        version: 1,
+        retries: {
+          [retry.id]: { sourceScheduleId: main.id, timezone: "Asia/Seoul" },
+        },
+      }),
+    );
+    await service.runOnce(main.id);
+    const result = await service.runOnce(retry.id);
+    expect(runner).toHaveBeenCalledTimes(1);
+    expect(result.runs[0].agentId).toBeNull();
+    expect(result.runs[0].output).toContain("[retry skipped]");
   });
 
   test("ticks due schedules and records run history on disk", async () => {

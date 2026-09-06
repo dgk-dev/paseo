@@ -210,6 +210,8 @@ export class ProviderSnapshotManager {
   private readonly events = new EventEmitter();
   private destroyed = false;
   private refreshTimeoutMs: number;
+  private readonly catalogRecoveryAttempts = new Set<string>();
+  private readonly catalogRecoveryNotBefore = new Map<string, number>();
   private diagnosticTimeoutMs: number;
   private readonly logger: Logger;
   private readonly workspaceGitService?: Pick<WorkspaceGitService, "resolveRepoRoot">;
@@ -855,6 +857,22 @@ export class ProviderSnapshotManager {
       this.resetSnapshotToLoading(cwd, missingProviders);
     }
 
+    const recoverable = providersToInspect.filter((provider) => {
+      const entry = snapshot.get(provider);
+      const key = JSON.stringify([cwd, provider]);
+      if (
+        entry?.status !== "error" ||
+        this.catalogRecoveryAttempts.has(key) ||
+        Date.now() < (this.catalogRecoveryNotBefore.get(key) ?? 0) ||
+        !/database is locked|SQLITE_BUSY|ECONNRESET|ECONNREFUSED|Pi RPC request timed out|Timed out refreshing/i.test(
+          entry.error ?? "",
+        )
+      )
+        return false;
+      this.catalogRecoveryAttempts.add(key);
+      return true;
+    });
+    if (recoverable.length) this.resetSnapshotToLoading(cwd, recoverable);
     return providersToInspect.filter((provider) => snapshot.get(provider)?.status === "loading");
   }
 
@@ -1001,6 +1019,10 @@ export class ProviderSnapshotManager {
         return;
       }
 
+      if (this.isCurrentProviderLoad(snapshotCwd, provider, load)) {
+        this.catalogRecoveryAttempts.delete(JSON.stringify([snapshotCwd, provider]));
+        this.catalogRecoveryNotBefore.delete(JSON.stringify([snapshotCwd, provider]));
+      }
       setEntry({
         ...base,
         defaultModeId:
@@ -1012,6 +1034,12 @@ export class ProviderSnapshotManager {
         fetchedAt: new Date().toISOString(),
       });
     } catch (error) {
+      if (this.isCurrentProviderLoad(snapshotCwd, provider, load)) {
+        this.catalogRecoveryNotBefore.set(
+          JSON.stringify([snapshotCwd, provider]),
+          Date.now() + 1_000,
+        );
+      }
       const emitted = setEntry({
         ...base,
         status: "error",

@@ -200,6 +200,9 @@ export default {
       fdroidBuild: isFdroidBuild,
       profileBuild: isProfileBuild,
       directFcmPush: variant.directFcmPush === true,
+      ...(appVariant === "personal" && process.env.DASEO_SOURCE_COMMIT
+        ? { daseoSourceCommit: process.env.DASEO_SOURCE_COMMIT }
+        : {}),
       router: {},
       eas: {
         projectId: "0e7f65ce-0367-46c8-a238-2b65963d235a",

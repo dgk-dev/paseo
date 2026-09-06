@@ -249,6 +249,22 @@ personal variant is the deliberate exception: it uses `sh.paseo.dgk` for paralle
     `packages/app/src/composer/agent-controls/`, and
     `packages/server/src/server/agent/{agent-manager,providers/pi/agent}.ts`.
 
+## Local reliability contracts
+
+- Advisor, committee and handoff skills are manual-only in the bundled source. Startup skill
+  synchronization must retain `disable-model-invocation: true`; editing installed mirrors is not
+  a durable customization.
+- Transient catalog startup failures (SQLite lock, connection reset/refused, RPC deadline) get
+  one read-triggered recovery after a one-second cooldown. Auth/model errors do not auto-retry;
+  healthy catalogs and running agents are not reset.
+- Daily retry schedules can use the daemon-local `schedule-retry-policies.json` sidecar:
+  `{ "version": 1, "retries": { "bbbbbbbb": { "sourceScheduleId": "aaaaaaaa", "timezone": "Asia/Seoul" } } }`.
+  The source must be a daily fixed-time cron. The daemon checks the local calendar day before
+  starting a model: successful output, a running/inactive source, a not-yet-due source or an
+  already-attempted retry skips execution with a recorded reason. Failed/empty/missed due runs
+  permit one retry. Missing sources or malformed policy fail visibly without starting a model.
+  Existing schedules without a policy keep their behavior; this is not a workflow engine.
+
 ## Upstream adoption policy
 
 The last full upstream merge was 2026-08-16 (`4748aad10`). Daseo's timeline, replica cache,
@@ -292,6 +308,9 @@ tooltips, #3945 / #3825 / #4025 GitHub polling changes (no observed rate-limit p
 ## Product version policy
 
 - Mac and Android share one Daseo product SemVer. Any shipped platform change advances it.
+- Cut versions with `npm run version:all:patch` (or the other version:all scripts), not bare npm
+  version. Preparation requires a clean main, validates version-only manifest/lock changes,
+  commits explicit release paths and tags the resulting commit; it never stages the whole tree.
 - Do not rebuild an unchanged platform only to match a number. Its next real release jumps to the
   current product version.
 - Platform build numbers remain independent: Android `versionCode` and macOS `CFBundleVersion`
@@ -323,9 +342,12 @@ tooltips, #3945 / #3825 / #4025 GitHub polling changes (no observed rate-limit p
 - Android: verify the ignored personal Firebase config exists, use JDK 17 and the Android 36
   SDK (`JAVA_HOME=$(/usr/libexec/java_home -v 17)`,
   `ANDROID_HOME=/opt/homebrew/share/android-commandlinetools`), then run
-  `APP_VARIANT=personal npx expo prebuild --platform android --clean` and
-  `cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a` for the Fold
-  download (omit the architecture property to retain a universal fallback). Artifacts live in
+  `npm run build:daseo:android` from the repository root for the Fold arm64 download.
+  This carries APP_VARIANT and source commit through both prebuild and Gradle: expo-constants
+  regenerates embedded config during Gradle, so setting the variant only for prebuild is unsafe.
+  The command checks native and embedded package/version/name, direct FCM, source commit and
+  the stable APK signer before accepting the artifact. `npm run test:daseo:release` covers these
+  contracts and real repeated skill installation. Artifacts live in
   `~/paseo-builds/`, served at `https://mac.tail29eaf5.ts.net/`; install over Wi-Fi ADB
   (`phone install`) when available.
 - The Mac bundle embeds its exact source commit; the release manifest records source commits and

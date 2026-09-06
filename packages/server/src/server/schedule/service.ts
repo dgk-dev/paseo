@@ -17,6 +17,7 @@ import { type BoundCreateAgentCommand, formatProviderModel } from "../agent/crea
 import type { PersistedWorkspaceRecord } from "../workspace-registry.js";
 import type { CreatePaseoWorktreeWorkflowResult } from "../worktree-session.js";
 import { ScheduleStore } from "./store.js";
+import { readRetryPolicy, retrySkipReason, skippedRetryOutput } from "./retry-policy.js";
 import { computeNextRunAt, validateScheduleCadence } from "./cron.js";
 import type {
   CreateScheduleInput,
@@ -235,6 +236,7 @@ export interface ScheduleServiceOptions {
 
 export class ScheduleService {
   private readonly store: ScheduleStore;
+  private readonly paseoHome: string;
   private readonly logger: Logger;
   private readonly agentManager: ScheduleAgentManager;
   private readonly agentStorage: AgentStorage;
@@ -255,6 +257,7 @@ export class ScheduleService {
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(options: ScheduleServiceOptions) {
+    this.paseoHome = options.paseoHome;
     this.store = new ScheduleStore(join(options.paseoHome, "schedules"));
     this.logger = options.logger.child({ module: "schedule-service" });
     this.agentManager = options.agentManager;
@@ -699,7 +702,18 @@ export class ScheduleService {
     const scheduleWithRun = await this.appendRunningRun(schedule.id, runningRun);
 
     try {
-      const result = await this.runner(scheduleWithRun, runId);
+      const policy = await readRetryPolicy(this.paseoHome, schedule.id);
+      const skip = policy
+        ? retrySkipReason(
+            await this.store.get(policy.sourceScheduleId),
+            scheduleWithRun,
+            runningRun.scheduledFor,
+            policy.timezone,
+          )
+        : null;
+      const result = skip
+        ? { agentId: null, output: skippedRetryOutput(skip) }
+        : await this.runner(scheduleWithRun, runId);
       await this.finishRun({
         scheduleId: schedule.id,
         runId,

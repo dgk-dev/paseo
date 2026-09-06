@@ -61,8 +61,28 @@ if (args.print) {
   process.exit(0);
 }
 
+const gitRead = (...gitArgs) =>
+  execFileSync("git", ["-C", rootDir, ...gitArgs], { encoding: "utf8" }).trim();
+if (gitRead("branch", "--show-current") !== "main")
+  throw new Error("Release requires the existing main checkout");
+if (gitRead("status", "--porcelain"))
+  throw new Error(
+    "Commit task-owned changes before cutting a release; preserve other sessions' work",
+  );
+if (gitRead("tag", "--list", `v${nextVersion}`))
+  throw new Error(`Release tag already exists: v${nextVersion}`);
+
 execFileSync(
   "npm",
-  ["version", nextVersion, "--include-workspace-root", "--message", "chore(release): cut %s"],
-  { cwd: rootDir, stdio: "inherit" },
+  ["version", nextVersion, "--include-workspace-root", "--git-tag-version=false"],
+  {
+    cwd: rootDir,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DASEO_RELEASE_BASE: execFileSync("git", ["-C", rootDir, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim(),
+    },
+  },
 );

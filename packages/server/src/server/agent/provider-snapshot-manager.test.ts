@@ -105,6 +105,64 @@ async function runTestCatalogActivities(
 }
 
 describe("ProviderSnapshotManager public surface", () => {
+  test("recovers transient catalog errors once on later reads without retrying auth errors", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    const fetchCatalog = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("database is locked"))
+      .mockResolvedValueOnce({
+        models: [{ provider: "pi", id: "test", label: "Test" }],
+        modes: [],
+      });
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      extraClients: {
+        pi: createExtraClient("pi", { isAvailable: async () => true, fetchCatalog }),
+      },
+    });
+    try {
+      await expect(
+        manager.listModels({ cwd: homedir(), provider: "pi", wait: true }),
+      ).rejects.toThrow("database is locked");
+      clock.mockReturnValue(2_000);
+      await expect(
+        manager.listModels({ cwd: homedir(), provider: "pi", wait: true }),
+      ).resolves.toHaveLength(1);
+      expect(fetchCatalog).toHaveBeenCalledTimes(2);
+      fetchCatalog.mockRejectedValue(new Error("OAuth authentication failed"));
+      await manager.refresh({ cwd: homedir(), providers: ["pi"] });
+      clock.mockReturnValue(4_000);
+      await expect(
+        manager.listModels({ cwd: homedir(), provider: "pi", wait: true }),
+      ).rejects.toThrow("OAuth");
+      expect(fetchCatalog).toHaveBeenCalledTimes(3);
+    } finally {
+      manager.destroy();
+      clock.mockRestore();
+    }
+  });
+
+  test("does not endlessly retry a persistently locked catalog", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(0);
+    const fetchCatalog = vi.fn().mockRejectedValue(new Error("database is locked"));
+    const manager = new ProviderSnapshotManager({
+      logger: createTestLogger(),
+      extraClients: {
+        pi: createExtraClient("pi", { isAvailable: async () => true, fetchCatalog }),
+      },
+    });
+    try {
+      await expect(manager.listModels({ provider: "pi", wait: true })).rejects.toThrow();
+      clock.mockReturnValue(2_000);
+      await expect(manager.listModels({ provider: "pi", wait: true })).rejects.toThrow();
+      clock.mockReturnValue(4_000);
+      await expect(manager.listModels({ provider: "pi", wait: true })).rejects.toThrow();
+      expect(fetchCatalog).toHaveBeenCalledTimes(2);
+    } finally {
+      manager.destroy();
+      clock.mockRestore();
+    }
+  });
   test("validates complete Hub agent configurations through the current provider contract", async () => {
     const manager = new ProviderSnapshotManager({
       logger: createTestLogger(),

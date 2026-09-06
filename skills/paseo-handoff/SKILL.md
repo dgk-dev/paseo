@@ -1,5 +1,6 @@
 ---
 name: paseo-handoff
+disable-model-invocation: true
 description: Hand off the current task to another agent with full context. Use when the user says "handoff", "hand off", "hand this to", or wants to pass work to another agent.
 user-invocable: true
 ---

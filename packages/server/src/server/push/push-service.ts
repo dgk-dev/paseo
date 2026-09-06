@@ -107,11 +107,8 @@ export class PushService {
           "Expo push failed for token",
         );
 
-        // Remove invalid tokens
-        if (
-          ticket.details?.error === "DeviceNotRegistered" ||
-          ticket.details?.error === "InvalidCredentials"
-        ) {
+        // InvalidCredentials is a sender configuration problem, not a revoked device.
+        if (ticket.details?.error === "DeviceNotRegistered") {
           this.revokeToken(message.to);
         }
       }
