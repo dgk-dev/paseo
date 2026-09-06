@@ -70,7 +70,6 @@ describe("deriveStreamTurnTiming", () => {
     });
 
     assert.deepEqual(timing.byAssistantId.get("a1"), {
-      startedAt: userAt,
       completedAt: assistantAt,
       durationMs: 7000,
     });
@@ -93,11 +92,36 @@ describe("deriveStreamTurnTiming", () => {
     });
 
     const expected = {
-      startedAt: userAt,
       completedAt: lastAssistantAt,
       durationMs: 7000,
     };
     assert.deepEqual(timing.byAssistantId.get("a1"), expected);
     assert.deepEqual(timing.byAssistantId.get("a2"), expected);
+  });
+
+  it("preserves the completion timestamp when the loaded window has no visible prompt", () => {
+    const hiddenPromptTurnAt = new Date("2026-05-15T00:01:07.000Z");
+    const userAt = new Date("2026-05-15T00:02:00.000Z");
+    const assistantAt = new Date("2026-05-15T00:02:05.000Z");
+    const timing = deriveStreamTurnTiming({
+      isTurnActive: false,
+      activeTurnStartedAt: null,
+      tail: [
+        assistant("hidden-prompt-a1", new Date("2026-05-15T00:01:03.000Z")),
+        assistant("hidden-prompt-a2", hiddenPromptTurnAt),
+        user("u1", userAt),
+        assistant("a1", assistantAt),
+      ],
+      head: [],
+    });
+
+    assert.deepEqual(timing.byAssistantId.get("hidden-prompt-a2"), {
+      completedAt: hiddenPromptTurnAt,
+      durationMs: null,
+    });
+    assert.deepEqual(timing.byAssistantId.get("a1"), {
+      completedAt: assistantAt,
+      durationMs: 5000,
+    });
   });
 });

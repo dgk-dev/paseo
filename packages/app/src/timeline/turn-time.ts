@@ -1,9 +1,9 @@
 import type { StreamItem } from "@/types/stream";
 
 export interface TurnTiming {
-  startedAt: Date;
   completedAt: Date;
-  durationMs: number;
+  /** Null when the turn has no visible prompt in the loaded window, so no duration is known. */
+  durationMs: number | null;
 }
 
 export interface StreamTurnTiming {
@@ -23,13 +23,14 @@ export function deriveStreamTurnTiming(params: {
   let currentAssistantIds: string[] = [];
 
   const flushCompletedTurn = () => {
-    if (!currentUserAt || !currentLastItemAt || currentAssistantIds.length === 0) {
+    if (!currentLastItemAt || currentAssistantIds.length === 0) {
       return;
     }
     const timing: TurnTiming = {
-      startedAt: currentUserAt,
       completedAt: currentLastItemAt,
-      durationMs: Math.max(0, currentLastItemAt.getTime() - currentUserAt.getTime()),
+      durationMs: currentUserAt
+        ? Math.max(0, currentLastItemAt.getTime() - currentUserAt.getTime())
+        : null,
     };
     for (const id of currentAssistantIds) {
       byAssistantId.set(id, timing);
@@ -42,9 +43,6 @@ export function deriveStreamTurnTiming(params: {
       currentUserAt = item.timestamp;
       currentLastItemAt = null;
       currentAssistantIds = [];
-      return;
-    }
-    if (!currentUserAt) {
       return;
     }
     currentLastItemAt = item.timestamp;

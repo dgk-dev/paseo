@@ -561,7 +561,12 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
           const turnKey = resolveTurnKey(key);
           const turnEndAssistantId =
             collapsedStream.turnEndAssistantIdByTurnKey.get(turnKey) ?? key;
-          return baseRenderModel.turnTiming.byAssistantId.get(turnEndAssistantId)?.durationMs;
+          // A hidden-prompt turn has no known duration (null); the folded row then
+          // shows only its work count, like a turn without timing.
+          return (
+            baseRenderModel.turnTiming.byAssistantId.get(turnEndAssistantId)?.durationMs ??
+            undefined
+          );
         },
         isExpanded: (turnKey) => expandedWorkTurnKeys.has(turnKey),
         toggle: (turnKey) => {
