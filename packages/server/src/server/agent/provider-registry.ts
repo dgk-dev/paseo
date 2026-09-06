@@ -71,6 +71,8 @@ export type { AgentProviderDefinition };
 export { AGENT_PROVIDER_DEFINITIONS, getAgentProviderDefinition };
 
 export interface ProviderDefinition extends AgentProviderDefinition {
+  /** Effective inputs after overrides and inheritance; used to detect real config changes. */
+  configuration: Omit<ResolvedProvider, "createBaseClient" | "contract"> | null;
   enabled: boolean;
   selectionPolicy?: AgentProviderSelectionPolicy;
   /**
@@ -612,8 +614,10 @@ function createRegistryEntry(
     resolved.definition.id !== "pi" &&
     resolved.derivedFromProviderId !== "pi";
 
+  const { createBaseClient: _createBaseClient, contract: _contract, ...configuration } = resolved;
   return {
     ...resolved.definition,
+    configuration,
     enabled: resolved.enabled,
     selectionPolicy: resolved.selectionPolicy,
     derivedFromProviderId: resolved.derivedFromProviderId,
