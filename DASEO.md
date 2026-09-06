@@ -4,9 +4,12 @@
 personal fork of [Paseo](https://github.com/getpaseo/paseo), built and shipped as his own
 Mac app and Android APK. Logo: **DΛ**.
 
-This file is the fork's source of truth. When asked to "apply Paseo updates to Daseo",
-merge upstream `main` into this branch, keep every delta listed below working, rebuild
-each changed platform from the task commit, and update this file if the delta set changes.
+This file is the fork's source of truth. Daseo is an independent product, not a tracking
+fork: since 2026-09-06 it no longer merges upstream `main` wholesale. When asked to "apply
+Paseo updates to Daseo", review upstream commits individually and adopt only those that
+solve a real Daseo problem without a trade-off (see "Upstream adoption policy" below), keep
+every delta listed below working, rebuild each changed platform from the task commit, and
+update this file if the delta set or the adoption log changes.
 
 ## Identity
 
@@ -245,6 +248,46 @@ personal variant is the deliberate exception: it uses `sh.paseo.dgk` for paralle
     boundary. Key files: `packages/app/src/{create-agent-preferences,hooks}/`,
     `packages/app/src/composer/agent-controls/`, and
     `packages/server/src/server/agent/{agent-manager,providers/pi/agent}.ts`.
+
+## Upstream adoption policy
+
+The last full upstream merge was 2026-08-16 (`4748aad10`). Daseo's timeline, replica cache,
+Explorer, mobile keyboard/composer, and popup ownership have since diverged on purpose, so a
+whole-branch merge is no longer possible without discarding fork deltas. Judge each upstream
+commit by, in order: does it fix a problem Daseo actually has; has Daseo already solved it its
+own way; is the root cause the same, not just the symptom; does it keep Daseo's current
+workspace, browser, composer, and model-selection behavior; can the needed part be taken
+without dragging in a new platform. Prefer `git cherry-pick -x` when the commit applies; hand-port
+with the upstream hash in the commit body when it does not. Never resolve a conflict by taking
+upstream wholesale.
+
+Adopted since the last merge (upstream PR → Daseo commit subject):
+
+- #4208 disable repository `core.fsmonitor` in daemon git commands (cherry-pick).
+- #3909 forward-compatible `desktop-settings.json` (cherry-pick).
+- #4283 reject pending Codex app-server requests on dispose (cherry-pick).
+- #4068 stop reporting new agent work as "reopened" (cherry-pick).
+- #4008 Pi RPC deadline 30s → 60s, `params.rpcTimeoutMs`, phase-attributed timeout errors
+  (hand-port, Pi + JSONL transport only; OMP part not carried).
+- 11e76f665 resume agents cleanly after a failed turn (hand-port).
+- #4332 preserve unchanged provider registry/client/catalog state across config reloads
+  (hand-port without plugin providers).
+- #4170 completion timestamps for turns without a visible prompt (hand-port adapted to
+  Daseo's user-message turn boundaries).
+- #4228 react-native-unistyles web registry leak patch (patch + postinstall entry only).
+- #4066 readable Paseo tool-call details (cherry-pick; real-Codex e2e not carried).
+- #4032, #4049, #4064, #4161 zoomable image previews, Android lightbox gestures, gesture
+  stabilization, Escape-first overlay dismissal (cherry-picks; Daseo-local
+  `components/ui/icon-button-chrome.ts` provides the small toolbar chrome).
+- #4107 fullscreen Mermaid viewer on web (cherry-pick).
+
+Reviewed and deliberately not adopted: #4353 (reload ordering change targets Codex's exclusive
+session writer; Daseo reloads only on user refresh and voice mode), #4190 / 140b0bb71 / #3907
+/ #3975 / #4210 / #4033 (assume upstream's timeline, replica-cache, and navigation
+architecture), #4044 / #4051 / #4090 / #4275 (overlap delta 18's native composer replacement
+and need device QA), #3411 and #4277 (depend on the plugin timeline/tool platform), #4166
+(32k-character answer cap conflicts with delta 5), #3826 Explorer pane host, #4214 tab
+tooltips, #3945 / #3825 / #4025 GitHub polling changes (no observed rate-limit pressure).
 
 ## Product version policy
 
