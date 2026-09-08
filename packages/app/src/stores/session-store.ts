@@ -305,6 +305,11 @@ export interface AgentTimelineCursorState {
   }>;
 }
 
+export interface AgentTimelineOlderFetchError {
+  epoch: string;
+  startSeq: number;
+}
+
 export interface SessionReplicaTimeline {
   agentId: string;
   items: StreamItem[];
@@ -415,6 +420,9 @@ export interface SessionState {
   agentTimelineHasOlder: Map<string, boolean>;
   agentTimelineHasNewer: Map<string, boolean>;
   agentTimelineOlderFetchInFlight: Map<string, boolean>;
+  // Cursor of the oldest page that failed to load, so an unreadable page is not
+  // requested again on every scroll to the history start.
+  agentTimelineOlderFetchError: Map<string, AgentTimelineOlderFetchError>;
   historySyncGeneration: number;
   agentHistorySyncGeneration: Map<string, number>;
   agentAuthoritativeHistoryApplied: Map<string, boolean>;
@@ -543,6 +551,14 @@ interface SessionStoreActions {
     serverId: string,
     state: Map<string, boolean> | ((prev: Map<string, boolean>) => Map<string, boolean>),
   ) => void;
+  setAgentTimelineOlderFetchError: (
+    serverId: string,
+    state:
+      | Map<string, AgentTimelineOlderFetchError>
+      | ((
+          prev: Map<string, AgentTimelineOlderFetchError>,
+        ) => Map<string, AgentTimelineOlderFetchError>),
+  ) => void;
   bumpHistorySyncGeneration: (serverId: string) => void;
   markAgentHistorySynchronized: (serverId: string, agentId: string) => void;
   setAgentAuthoritativeHistoryApplied: (
@@ -667,6 +683,7 @@ function createInitialSessionState(
     agentTimelineHasOlder: new Map(),
     agentTimelineHasNewer: new Map(),
     agentTimelineOlderFetchInFlight: new Map(),
+    agentTimelineOlderFetchError: new Map(),
     historySyncGeneration: 0,
     agentHistorySyncGeneration: new Map(),
     agentAuthoritativeHistoryApplied: new Map(),
@@ -1426,6 +1443,27 @@ export const useSessionStore = create<SessionStore>()(
             sessions: {
               ...prev.sessions,
               [serverId]: { ...session, agentTimelineOlderFetchInFlight: nextState },
+            },
+          };
+        });
+      },
+
+      setAgentTimelineOlderFetchError: (serverId, state) => {
+        set((prev) => {
+          const session = prev.sessions[serverId];
+          if (!session) {
+            return prev;
+          }
+          const nextState =
+            typeof state === "function" ? state(session.agentTimelineOlderFetchError) : state;
+          if (session.agentTimelineOlderFetchError === nextState) {
+            return prev;
+          }
+          return {
+            ...prev,
+            sessions: {
+              ...prev.sessions,
+              [serverId]: { ...session, agentTimelineOlderFetchError: nextState },
             },
           };
         });

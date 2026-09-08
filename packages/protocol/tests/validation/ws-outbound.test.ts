@@ -131,6 +131,37 @@ const SourceSchema = z.object({
     });
   });
 
+  it("keeps transformed members reachable inside a discriminated union", async () => {
+    // zod-aot 0.20.4 dropped `.transform()` members from the generated discriminator
+    // dispatch, which silently invalidated every message carrying a text attachment.
+    const schema = await compileInlineSchema(`
+const SourceSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("plain"), label: z.string() }),
+  z
+    .object({ type: z.literal("transformed"), text: z.string(), contextKind: z.string().optional() })
+    .transform(({ contextKind, ...attachment }) => ({
+      ...attachment,
+      ...(contextKind === "keep" ? { contextKind } : {}),
+    })),
+]);
+`);
+
+    expect(schema.safeParse({ type: "plain", label: "ok" })).toMatchObject({ success: true });
+    expect(schema.safeParse({ type: "transformed", text: "body" })).toMatchObject({
+      success: true,
+      data: { type: "transformed", text: "body" },
+    });
+    expect(
+      schema.safeParse({ type: "transformed", text: "body", contextKind: "keep" }),
+    ).toMatchObject({
+      success: true,
+      data: { type: "transformed", text: "body", contextKind: "keep" },
+    });
+    expect(
+      schema.safeParse({ type: "transformed", text: "body", contextKind: "drop" }),
+    ).toMatchObject({ success: true, data: { type: "transformed", text: "body" } });
+  });
+
   it("accepts a minimal valid envelope and rejects a corrupted envelope", () => {
     expect(GeneratedWSOutboundMessageSchema.safeParse({ type: "pong" }).success).toBe(true);
     expect(GeneratedWSOutboundMessageSchema.safeParse({ type: "not_a_message" }).success).toBe(
@@ -311,6 +342,178 @@ const SourceSchema = z.object({
       success: true,
       data: envelope,
     });
+  });
+
+  it.each([
+    {
+      name: "text",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        title: "Browser element · span",
+        text: '<browser-element url="https://example.com">span</browser-element>',
+      },
+    },
+    {
+      name: "text with chat history context",
+      attachment: {
+        type: "text",
+        mimeType: "text/plain",
+        contextKind: "chat_history",
+        title: "Earlier conversation",
+        text: "previous turns",
+      },
+    },
+    {
+      name: "github_pr",
+      attachment: {
+        type: "github_pr",
+        mimeType: "application/github-pr",
+        number: 7,
+        title: "Fix timeline",
+        url: "https://github.com/acme/repo/pull/7",
+      },
+    },
+    {
+      name: "github_issue",
+      attachment: {
+        type: "github_issue",
+        mimeType: "application/github-issue",
+        number: 8,
+        title: "Timeline stalls",
+        url: "https://github.com/acme/repo/issues/8",
+      },
+    },
+    {
+      name: "forge_change_request",
+      attachment: {
+        type: "forge_change_request",
+        mimeType: "application/paseo-forge-change-request",
+        forge: "gitlab",
+        number: 9,
+        title: "Fix timeline",
+        url: "https://gitlab.com/acme/repo/-/merge_requests/9",
+      },
+    },
+    {
+      name: "forge_issue",
+      attachment: {
+        type: "forge_issue",
+        mimeType: "application/paseo-forge-issue",
+        forge: "gitlab",
+        number: 10,
+        title: "Timeline stalls",
+        url: "https://gitlab.com/acme/repo/-/issues/10",
+      },
+    },
+    {
+      name: "review",
+      attachment: {
+        type: "review",
+        mimeType: "application/paseo-review",
+        cwd: "/repo",
+        mode: "uncommitted",
+        comments: [],
+      },
+    },
+    {
+      name: "uploaded_file",
+      attachment: {
+        type: "uploaded_file",
+        id: "upload-1",
+        fileName: "notes.txt",
+        mimeType: "text/plain",
+        size: 12,
+        path: "/uploads/notes.txt",
+      },
+    },
+  ])("accepts a $name attachment in streamed and fetched timeline items", ({ attachment }) => {
+    const item = { type: "user_message", text: "look at this", attachments: [attachment] };
+
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse({
+        type: "session",
+        message: {
+          type: "agent_stream",
+          payload: {
+            agentId: "agent-1",
+            timestamp: "2026-09-08T05:40:39.840Z",
+            event: { type: "timeline", provider: "pi", item },
+          },
+        },
+      }).success,
+    ).toBe(true);
+
+    expect(
+      GeneratedWSOutboundMessageSchema.safeParse({
+        type: "session",
+        message: {
+          type: "fetch_agent_timeline_response",
+          payload: {
+            requestId: "timeline-1",
+            agentId: "agent-1",
+            agent: null,
+            direction: "before",
+            projection: "projected",
+            epoch: "epoch-1",
+            reset: false,
+            staleCursor: false,
+            gap: false,
+            window: { minSeq: 1, maxSeq: 1, nextSeq: 2 },
+            startCursor: { epoch: "epoch-1", seq: 1 },
+            endCursor: { epoch: "epoch-1", seq: 1 },
+            hasOlder: false,
+            hasNewer: true,
+            entries: [
+              {
+                provider: "pi",
+                item,
+                timestamp: "2026-09-08T05:40:39.840Z",
+                seqStart: 1,
+                seqEnd: 1,
+                sourceSeqRanges: [{ startSeq: 1, endSeq: 1 }],
+                collapsed: [],
+              },
+            ],
+            error: null,
+          },
+        },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("strips unknown text attachment context kinds while keeping chat history", () => {
+    const parseAttachment = (contextKind: string) => {
+      const result = GeneratedWSOutboundMessageSchema.safeParse({
+        type: "session",
+        message: {
+          type: "agent_stream",
+          payload: {
+            agentId: "agent-1",
+            timestamp: "2026-09-08T05:40:39.840Z",
+            event: {
+              type: "timeline",
+              provider: "pi",
+              item: {
+                type: "user_message",
+                text: "look at this",
+                attachments: [{ type: "text", mimeType: "text/plain", contextKind, text: "body" }],
+              },
+            },
+          },
+        },
+      });
+      expect(result.success).toBe(true);
+      const message = result.data as {
+        message: {
+          payload: { event: { item: { attachments: { contextKind?: string }[] } } };
+        };
+      };
+      return message.message.payload.event.item.attachments[0];
+    };
+
+    expect(parseAttachment("chat_history")).toMatchObject({ contextKind: "chat_history" });
+    expect(parseAttachment("workspace_file")).not.toHaveProperty("contextKind");
   });
 
   it("emits runtime imports with .js extensions", async () => {

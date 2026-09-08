@@ -77,6 +77,10 @@ export interface StreamRenderInput {
   isLoadingOlderHistory: boolean;
   hasOlderHistory: boolean;
   olderHistoryProgressKey: string | null;
+  // The page before the oldest loaded row failed to load; automatic retries are
+  // blocked until the reader asks for one.
+  hasOlderHistoryError?: boolean;
+  onRetryOlderHistory?: () => void;
   scrollEnabled: boolean;
   listStyle: StyleProp<ViewStyle>;
   baseListContentContainerStyle: StyleProp<ViewStyle>;

@@ -256,6 +256,8 @@ export interface AgentStreamViewProps {
     isLoadingOlder: boolean;
     progressKey: string | null;
     onLoadOlder: () => boolean | Promise<boolean>;
+    hasOlderError?: boolean;
+    onRetryLoadOlder?: () => void;
   };
 }
 
@@ -366,14 +368,20 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       agentId,
       toast,
     });
-    const { isLoadingOlder, hasOlder, progressKey, loadOlder } = historyPagination
-      ? {
-          isLoadingOlder: historyPagination.isLoadingOlder,
-          hasOlder: historyPagination.hasOlder,
-          progressKey: historyPagination.progressKey,
-          loadOlder: historyPagination.onLoadOlder,
-        }
-      : agentHistoryPagination;
+    const { isLoadingOlder, hasOlder, progressKey, loadOlder, hasOlderError, retryLoadOlder } =
+      historyPagination
+        ? {
+            isLoadingOlder: historyPagination.isLoadingOlder,
+            hasOlder: historyPagination.hasOlder,
+            progressKey: historyPagination.progressKey,
+            loadOlder: historyPagination.onLoadOlder,
+            hasOlderError: historyPagination.hasOlderError === true,
+            retryLoadOlder: historyPagination.onRetryLoadOlder,
+          }
+        : agentHistoryPagination;
+    const handleRetryOlderHistory = useStableEvent(() => {
+      void retryLoadOlder?.();
+    });
     // Keep entry/exit animations off on Android due to RN dispatchDraw crashes
     // tracked in react-native-reanimated#8422.
     const shouldDisableEntryExitAnimations = Platform.OS === "android";
@@ -1082,6 +1090,8 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
                 isLoadingOlderHistory: isLoadingOlder,
                 hasOlderHistory: hasOlder,
                 olderHistoryProgressKey: progressKey,
+                hasOlderHistoryError: hasOlderError,
+                onRetryOlderHistory: handleRetryOlderHistory,
                 scrollEnabled: streamScrollEnabled,
                 listStyle: stylesheet.list,
                 baseListContentContainerStyle: stylesheet.listContentContainer,
@@ -1198,7 +1208,9 @@ function historyPaginationPropsEqual(
     left?.hasOlder === right?.hasOlder &&
     left?.isLoadingOlder === right?.isLoadingOlder &&
     left?.progressKey === right?.progressKey &&
-    left?.onLoadOlder === right?.onLoadOlder
+    left?.onLoadOlder === right?.onLoadOlder &&
+    left?.hasOlderError === right?.hasOlderError &&
+    left?.onRetryLoadOlder === right?.onRetryLoadOlder
   );
 }
 

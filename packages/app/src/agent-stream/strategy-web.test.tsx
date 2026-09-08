@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+import { i18n as testI18n } from "@/i18n/i18next";
 import React from "react";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -28,6 +29,16 @@ vi.hoisted(() => {
 
 vi.mock("react-native-unistyles", () => ({
   withUnistyles: (Component: React.ComponentType) => Component,
+  StyleSheet: {
+    create: (factory: unknown) =>
+      typeof factory === "function"
+        ? (factory as (theme: unknown) => unknown)({
+            spacing: { 2: 8, 4: 16 },
+            fontSize: { xs: 12 },
+            colors: { foreground: "#fff", foregroundMuted: "#999" },
+          })
+        : factory,
+  },
 }));
 
 function userMessage(index: number): StreamItem {
@@ -38,6 +49,8 @@ function userMessage(index: number): StreamItem {
     timestamp: new Date(`2026-04-20T00:00:${String(index % 60).padStart(2, "0")}.000Z`),
   };
 }
+
+void testI18n;
 
 const VIRTUAL_ROW_STYLE = { height: 24 };
 
@@ -150,6 +163,55 @@ describe("createWebStreamStrategy", () => {
 
     expect(rowRenderCount.mock.calls.length).toBeGreaterThan(0);
     expect(rowRenderCount.mock.calls.length).toBeLessThanOrEqual(historyVirtualized.length);
+  });
+
+  it("offers an explicit retry in the history-start slot after an older page fails", () => {
+    const strategy = createWebStreamStrategy({ isMobileBreakpoint: false });
+    const viewportRef = React.createRef<StreamViewportHandle>();
+    const renderInput: StreamRenderInput = {
+      agentId: "agent",
+      segments: { historyVirtualized: [], historyMounted: [], liveHead: [userMessage(1)] },
+      boundary: {
+        hasVirtualizedHistory: false,
+        hasMountedHistory: false,
+        hasLiveHead: true,
+      },
+      renderers: createRenderers(vi.fn()),
+      listEmptyComponent: null,
+      viewportRef,
+      routeBottomAnchorRequest: null,
+      isAuthoritativeHistoryReady: true,
+      onNearBottomChange: vi.fn(),
+      onNearHistoryStart: vi.fn().mockReturnValue(true),
+      isLoadingOlderHistory: false,
+      hasOlderHistory: true,
+      olderHistoryProgressKey: "epoch-1:10",
+      scrollEnabled: true,
+      listStyle: null,
+      baseListContentContainerStyle: null,
+      forwardListContentContainerStyle: null,
+    };
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    act(() => {
+      root?.render(strategy.render({ ...renderInput, onRetryOlderHistory: vi.fn() }));
+    });
+    expect(container.querySelector('[data-testid="load-older-history-retry"]')).toBeNull();
+
+    act(() => {
+      root?.render(
+        strategy.render({
+          ...renderInput,
+          hasOlderHistoryError: true,
+          onRetryOlderHistory: vi.fn(),
+        }),
+      );
+    });
+
+    expect(container.querySelector('[data-testid="load-older-history-error"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="load-older-history-retry"]')).not.toBeNull();
   });
 
   it("rerenders a stable live-head row when its revision changes", () => {

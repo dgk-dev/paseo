@@ -24,6 +24,7 @@ import type { StreamItem } from "@/types/stream";
 import type { Theme } from "@/styles/theme";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { useBottomAnchorController } from "./bottom-anchor-controller";
+import { OlderHistoryErrorRow } from "./older-history-error-row";
 import { useScrollKeyboardDismiss } from "./scroll-keyboard-dismiss/use-scroll-keyboard-dismiss";
 import type { StreamRenderInput, StreamStrategy, StreamViewportHandle } from "./strategy";
 import {
@@ -102,6 +103,8 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
     isLoadingOlderHistory,
     hasOlderHistory,
     olderHistoryProgressKey,
+    hasOlderHistoryError,
+    onRetryOlderHistory,
     scrollEnabled,
     listStyle,
     baseListContentContainerStyle,
@@ -589,9 +592,12 @@ function NativeStreamViewport(props: StreamRenderInput & { strategy: StreamStrat
             <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
           </View>
         ) : null}
+        {!isLoadingOperation && hasOlderHistoryError && onRetryOlderHistory ? (
+          <OlderHistoryErrorRow onRetry={onRetryOlderHistory} />
+        ) : null}
       </View>
     );
-  }, [historyStartPaginationState]);
+  }, [hasOlderHistoryError, historyStartPaginationState, onRetryOlderHistory]);
 
   // RN's FlatList strictMode keeps its internal renderItem wrapper stable when
   // data or the live header changes, preserving the row identities above.

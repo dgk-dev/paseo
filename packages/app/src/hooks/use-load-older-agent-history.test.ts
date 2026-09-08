@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ToastApi, ToastShowOptions } from "@/components/toast-host";
-import type { AgentTimelineCursorState } from "@/stores/session-store";
+import type {
+  AgentTimelineCursorState,
+  AgentTimelineOlderFetchError,
+} from "@/stores/session-store";
 import { TIMELINE_FETCH_PAGE_SIZE } from "@/timeline/timeline-fetch-policy";
 import {
   loadOlderAgentHistory,
@@ -188,5 +191,77 @@ describe("loadOlderAgentHistory", () => {
       ["[Timeline] failed to load older agent history", agentId, error],
     ]);
     expect(inFlight.values).toEqual([false, true, false]);
+  });
+
+  it("records the failed page so scrolling back does not re-request it", async () => {
+    const client = createClient(async () => {
+      throw new Error("unreadable page");
+    });
+    const inFlight = createInFlight();
+    const toast = createToast();
+    const logger = createLogger();
+    let failedCursor: AgentTimelineOlderFetchError | null = null;
+
+    const deps = {
+      client,
+      cursor: someCursor,
+      hasOlder: true,
+      isLoadingOlder: false,
+      setInFlight: inFlight.setInFlight,
+      toast,
+      logger,
+      setFailedCursor: (value: AgentTimelineOlderFetchError | null) => {
+        failedCursor = value;
+      },
+    };
+
+    await loadOlderAgentHistory(agentId, deps);
+    expect(failedCursor).toEqual({ epoch: "epoch-1", startSeq: 10 });
+
+    const started = await loadOlderAgentHistory(agentId, { ...deps, failedCursor });
+
+    expect(client.calls).toHaveLength(1);
+    expect(toast.shown).toHaveLength(1);
+    expect(started).toBe(false);
+  });
+
+  it("still auto-loads when the history start moved past the failed page", async () => {
+    const client = createClient();
+    const inFlight = createInFlight();
+
+    const started = await loadOlderAgentHistory(agentId, {
+      client,
+      cursor: someCursor,
+      hasOlder: true,
+      isLoadingOlder: false,
+      setInFlight: inFlight.setInFlight,
+      failedCursor: { epoch: "epoch-1", startSeq: 4 },
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(started).toBe(true);
+  });
+
+  it("lets an explicit retry re-request the failed page and clears it on success", async () => {
+    const client = createClient();
+    const inFlight = createInFlight();
+    let failedCursor: AgentTimelineOlderFetchError | null = { epoch: "epoch-1", startSeq: 10 };
+
+    const started = await loadOlderAgentHistory(agentId, {
+      client,
+      cursor: someCursor,
+      hasOlder: true,
+      isLoadingOlder: false,
+      setInFlight: inFlight.setInFlight,
+      failedCursor,
+      setFailedCursor: (value) => {
+        failedCursor = value;
+      },
+      trigger: "manual",
+    });
+
+    expect(client.calls).toHaveLength(1);
+    expect(failedCursor).toBeNull();
+    expect(started).toBe(true);
   });
 });

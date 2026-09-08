@@ -12,6 +12,7 @@ import { withUnistyles } from "react-native-unistyles";
 import { useRetainedPanelActive } from "@/components/retained-panel";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useStableEvent } from "@/hooks/use-stable-event";
+import { OlderHistoryErrorRow } from "./older-history-error-row";
 import type { Theme } from "@/styles/theme";
 import { WEB_SCROLLBAR_SIZE_PX } from "@/styles/web-scrollbar";
 import { estimateStreamItemHeight } from "./web-virtualization";
@@ -230,6 +231,8 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
     isLoadingOlderHistory,
     hasOlderHistory,
     olderHistoryProgressKey,
+    hasOlderHistoryError,
+    onRetryOlderHistory,
     scrollEnabled,
     isMobileBreakpoint,
   } = props;
@@ -1084,9 +1087,12 @@ function WebStreamViewport(props: StreamRenderInput & { isMobileBreakpoint: bool
             <ThemedLoadingSpinner size="small" uniProps={foregroundMutedColorMapping} />
           </div>
         ) : null}
+        {!isLoadingOperation && hasOlderHistoryError && onRetryOlderHistory ? (
+          <OlderHistoryErrorRow onRetry={onRetryOlderHistory} />
+        ) : null}
       </div>
     );
-  }, [historyStartPaginationState]);
+  }, [hasOlderHistoryError, historyStartPaginationState, onRetryOlderHistory]);
   const shouldRenderEmpty =
     !boundary.hasMountedHistory &&
     !boundary.hasVirtualizedHistory &&

@@ -251,6 +251,17 @@ personal variant is the deliberate exception: it uses `sh.paseo.dgk` for paralle
 
 ## Local reliability contracts
 
+- The generated WS outbound validator must accept every `AgentAttachmentSchema` branch, including
+  the `.transform()`-wrapped text attachment. zod-aot 0.20.4 dropped transformed members from the
+  generated discriminator dispatch, so any timeline page holding a browser-element, workspace-file,
+  PR-context or chat-history attachment failed validation and took the whole page with it. The pin
+  stays at or above 0.20.5 and `packages/protocol/tests/validation/ws-outbound.test.ts` covers both
+  the compiler behaviour and every attachment branch on real timeline messages.
+- A page of older history that fails to load is remembered by its cursor. Returning to the history
+  start does not silently re-request it; the history-start slot offers an explicit Retry instead,
+  and the block clears as soon as the start cursor moves or a retry succeeds. Key files:
+  `packages/app/src/hooks/use-load-older-agent-history.ts` and
+  `packages/app/src/agent-stream/older-history-error-row.tsx`.
 - Advisor, committee and handoff skills are manual-only in the bundled source. Startup skill
   synchronization must retain `disable-model-invocation: true`; editing installed mirrors is not
   a durable customization.
