@@ -85,7 +85,12 @@ personal variant is the deliberate exception: it uses `sh.paseo.dgk` for paralle
    UI contract; `blockGroupId` is used when available but never required. Active,
    partial/detached, permission-blocked, failed, and canceled turns stay open, while error and
    failed/canceled tool rows remain visible. Terminal outcomes survive canonical hydration, and
-   provider message identity preserves manual expansion across renderer-row changes. The projection
+   provider message identity preserves manual expansion across renderer-row changes. A summary row
+   never hides more of the answer than it leaves visible: a folded assistant message that is
+   substantive on its own and longer than everything still on screen is revealed. That guard exists
+   because phase metadata is only as good as its source — codex gets commentary/final_answer from
+   the model, while pi derives it from stopReason, so an answer written just before one last tool
+   call is untagged and would otherwise fold behind a two-line sign-off. The projection
    also spans the settled/live buffer boundary. Key files: `packages/protocol/src/agent-types.ts`,
    `packages/server/src/server/agent/providers/{codex-app-server-agent,pi/agent}.ts`,
    `packages/app/src/agent-stream/collapsed-work.ts`, `view.tsx`, `collapsed-work-row.tsx`, and

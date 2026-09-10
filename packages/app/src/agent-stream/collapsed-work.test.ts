@@ -228,6 +228,84 @@ describe("collapseCompletedWork", () => {
     expect(result.workCountByTurnKey.get("a2")).toBe(2);
   });
 
+  test("keeps a substantive answer visible when only a short wrap-up ends the turn", () => {
+    // Pi derives the phase from stopReason, so an answer written just before one
+    // last tool call is untagged and folds, leaving a two-line sign-off as the
+    // only thing on screen. The summary row must not hide more of the answer
+    // than it shows.
+    const answer = "Here is the full analysis. ".repeat(30);
+    const items = [
+      item("user_message"),
+      assistant("long-answer", { text: answer }),
+      item("tool_call"),
+      assistant("wrap-up", { text: "Saved to memory.", phase: "final_answer" }),
+    ];
+    const result = collapseCompletedWork({
+      items,
+      expandedTurnKeys: NONE,
+      keepLastTurnExpanded: false,
+    });
+    expect(result.items.map((entry) => entry.id)).toEqual([items[0]!.id, "long-answer", "wrap-up"]);
+    // The turn still folds its work, and its key still names the turn-end message.
+    expect(result.workCountByTurnKey.get("wrap-up")).toBe(1);
+  });
+
+  test("still folds short narration when the visible answer is the substantial one", () => {
+    const items = [
+      item("user_message"),
+      assistant("narration", { text: "Let me check that file." }),
+      item("tool_call"),
+      assistant("answer", {
+        text: "The config is correct. ".repeat(30),
+        phase: "final_answer",
+      }),
+    ];
+    const result = collapseCompletedWork({
+      items,
+      expandedTurnKeys: NONE,
+      keepLastTurnExpanded: false,
+    });
+    expect(result.items.map((entry) => entry.id)).toEqual([items[0]!.id, "answer"]);
+    expect(result.workCountByTurnKey.get("answer")).toBe(2);
+  });
+
+  test("folds a long intermediate message when the visible answer outweighs it", () => {
+    const items = [
+      item("user_message"),
+      assistant("intermediate", { text: "Working through the options. ".repeat(20) }),
+      item("tool_call"),
+      assistant("answer", {
+        text: "Final recommendation with reasoning. ".repeat(40),
+        phase: "final_answer",
+      }),
+    ];
+    const result = collapseCompletedWork({
+      items,
+      expandedTurnKeys: NONE,
+      keepLastTurnExpanded: false,
+    });
+    expect(result.items.map((entry) => entry.id)).toEqual([items[0]!.id, "answer"]);
+  });
+
+  test("puts the summary row before the revealed answer, not after it", () => {
+    const answer = "Detailed findings follow. ".repeat(30);
+    const items = [
+      item("user_message"),
+      item("thought"),
+      assistant("long-answer", { text: answer }),
+      item("tool_call"),
+      assistant("wrap-up", { text: "Done.", phase: "final_answer" }),
+    ];
+    const result = collapseCompletedWork({
+      items,
+      expandedTurnKeys: NONE,
+      keepLastTurnExpanded: false,
+    });
+    // The anchor is the first visible assistant row, so the folded thought that
+    // preceded the answer is summarized above it rather than below.
+    expect(result.summaryTurnKeyByAssistantId.get("long-answer")).toBe("wrap-up");
+  });
+
   test("keeps every block of the final logical assistant response visible", () => {
     const messageId = "shared-provider-message";
     const items = [

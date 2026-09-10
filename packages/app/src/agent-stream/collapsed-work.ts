@@ -198,6 +198,63 @@ function getFinalGroupIndices(
   return finalGroupIndices;
 }
 
+/**
+ * Prose length of an assistant row, for the "never hide more than you show"
+ * check below. Non-assistant rows count as nothing.
+ */
+function assistantTextLength(item: StreamItem | undefined): number {
+  return item?.kind === "assistant_message" ? item.text.trim().length : 0;
+}
+
+/**
+ * A hidden answer this long is a real answer, not narration, so it is worth
+ * keeping on screen even when a later message formally ends the turn.
+ */
+const SUBSTANTIVE_ANSWER_CHARS = 500;
+
+/**
+ * Enforce the one thing a summary row must never do: hide more of the answer
+ * than it leaves visible.
+ *
+ * Phase metadata is only as trustworthy as its source. Codex receives
+ * commentary/final_answer from the model, so folding untagged text is safe
+ * there. Pi derives it from stopReason — `stop` plus text means final answer,
+ * anything else stays untagged — so an answer written just before one last
+ * tool call is untagged and folds, while a short wrap-up afterwards is the
+ * only thing left expanded. Measured over 1278 local pi-claude turns: 893
+ * fold something (that is the feature working), and in 17 the folded prose
+ * outweighs everything still visible. Those 17 are the ones that hide what
+ * the reader came for.
+ *
+ * Revealing only those keeps one-line narration folded, which is the point of
+ * the collapse; adopting codex's polarity wholesale — treat untagged as final
+ * — would un-fold roughly 70% of turns for this provider.
+ */
+function revealOverweightHiddenAnswers(
+  items: readonly StreamItem[],
+  assistantIndices: readonly number[],
+  visibleIndices: Set<number>,
+): void {
+  for (;;) {
+    const hidden = assistantIndices.filter((index) => !visibleIndices.has(index));
+    if (hidden.length === 0) return;
+    const largest = hidden.reduce((best, index) =>
+      assistantTextLength(items[index]) > assistantTextLength(items[best]) ? index : best,
+    );
+    const largestLength = assistantTextLength(items[largest]);
+    if (largestLength < SUBSTANTIVE_ANSWER_CHARS) return;
+    let visibleLength = 0;
+    for (const index of visibleIndices) visibleLength += assistantTextLength(items[index]);
+    if (largestLength <= visibleLength) return;
+    addLogicalAssistantGroup({
+      items,
+      assistantIndices,
+      terminalIndex: largest,
+      visibleIndices,
+    });
+  }
+}
+
 function getTurnDetails(
   items: readonly StreamItem[],
   turn: Turn,
@@ -233,9 +290,12 @@ function projectTurn(items: readonly StreamItem[], turn: Turn): TurnProjection |
   if (hasExceptionalOutcome) return null;
 
   const finalGroupIndices = getFinalGroupIndices(items, assistantIndices, lastAssistantIndex);
+  // Resolved before the reveal below, so the turn key stays anchored to the
+  // message that actually ended the turn and manual expansion survives.
   const turnEndAssistantIndex = Math.max(...finalGroupIndices);
   const turnEndAssistant = items[turnEndAssistantIndex];
   if (!turnEndAssistant || turnEndAssistant.kind !== "assistant_message") return null;
+  revealOverweightHiddenAnswers(items, assistantIndices, finalGroupIndices);
   const details = getTurnDetails(items, turn, finalGroupIndices);
   // Loading thoughts, running tools, and loading compaction markers indicate a
   // partial projection even if agent liveness briefly reports idle.
